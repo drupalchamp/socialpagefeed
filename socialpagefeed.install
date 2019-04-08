@@ -1,0 +1,81 @@
+<?php
+
+/**
+ * @file
+ * Social Page Feeds installation functions.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function socialpagefeed_schema() {
+  $schema['socialpagefeed_pages'] = array(
+    'fields' => array(
+      'id' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Primary ID field for the table. Not used for anything except internal lookups.',
+      ),
+      'page_title' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'description' => 'The Title of the Social Feed Pages.',
+      ),
+      'page_name' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'description' => 'The unique id of the Social Feed Pages.',
+      ),
+      'type' => array(
+        'description' => 'The Social Feed Page Type.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'status' => array(
+        'description' => 'Check status of the Social Feed Pages.',
+	'type' => 'int',
+        'size' => 'small',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 1,
+      ),
+      'updated' => array(
+        'description' => 'Store created and updated timestamp of the Social Feed Pages.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+    ),
+    'primary key' => array('id'),
+  );
+
+  return $schema;
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function socialpagefeed_uninstall() {
+  variable_del('socialpagefeed_facebook_app_id');
+  variable_del('socialpagefeed_facebook_secret_key');
+  variable_del('socialpagefeed_instagram_access_token');
+  variable_del('socialpagefeed_instagram_client_id');
+  variable_del('socialpagefeed_instagram_picture_count');
+  variable_del('socialpagefeed_instagram_picture_resolution');
+  variable_del('socialpagefeed_instagram_post_link');
+  variable_del('socialpagefeed_instagram_redirect_uri');
+  variable_del('socialpagefeed_twitter_consumer_key');
+  variable_del('socialpagefeed_twitter_consumer_secret');
+  variable_del('socialpagefeed_twitter_hashtag');
+  variable_del('socialpagefeed_twitter_teaser_text');
+  variable_del('socialpagefeed_twitter_time_ago');
+  variable_del('socialpagefeed_twitter_time_format');
+  variable_del('socialpagefeed_twitter_time_stamp');
+  variable_del('socialpagefeed_twitter_trim_length');
+  variable_del('socialpagefeed_twitter_tweets_count');
+  variable_del('socialpagefeed_twitter_username');
+}

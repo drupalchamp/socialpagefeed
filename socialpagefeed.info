@@ -1,0 +1,6 @@
+name = Social Page Feed
+description = Provides user an option to easily fetch social page feeds from Facebook, Twitter or Instagram and then display them accordingly using block.
+core = 7.x
+version = 7.x-1.x
+package = Social
+configure = admin/config/services/socialpagefeed

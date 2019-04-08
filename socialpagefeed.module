@@ -1,0 +1,502 @@
+<?php
+
+/**
+ * @file
+ * Provide Facebook, Twitter and Instagram.
+ */
+
+/**
+ * Implements hook_help().
+ */
+function socialpagefeed_help($path, $arg) {
+  switch ($path) {
+    case 'admin/help#socialpagefeed':
+      $output = '';
+      $output .= '<h3>' . t('About') . '</h3>';
+      $output .= '<p>' . t('The Social Feed module allows you to fetch the feeds directly from Facebook, Twitter & Instagram by simply enabling and configuring its blocks.') . '</p>';
+      $output .= '<h4>' . t('Instagram') . '</h4>';
+      $output .= '<p>' . t('To be able to use and search after hashimages on Instagram, you need a Client ID. This simple guide will step by step tell you have to get one.') . '</p>';
+      $output .= '<strong>' . t('Note: You need to have a Instagram account to be able to get a Client ID.') . '</strong>';
+      $output .= '<p>' . t('Follow these simple steps to get your own key.') . '</p>';
+      $output .= '<ol><li>' . t("Login if you aren't.") . '</li><li>' . t('Go to the <a href="@instagram" target="@blank">Instagram Developer Page</a>.', array('@instagram' => 'https://www.instagram.com/developer/', '@blank' => '_blank')) . '</li><li>' . t('Click on "Register your application".') . '</li><li>' . t("If you don't already have an application registered, you'll now see a form to register a new one. If you instead see a list of 'clients', click the 'Register new client' at the top right.") . '</li><li>' . t('Set application name to your websites name') . '</li><li>' . t('Type in a description, something like "Registering to get a client ID to use in the Social Feed - Drupal Module"') . '</li><li>' . t('Add the url of your site in the two last fields.') . '</li><li>' . t('Add the contact email') . '</li><li>' . t('Hit register.') . '</li><li>' . t('Click "Manage clients" in the top menu and you\'ll now see you new client in the list and a client id, client secret and more.') . '</li>';
+
+      return $output;
+  }
+}
+
+/**
+ * Implements hook_menu().
+ */
+function socialpagefeed_menu() {
+  $items = array();
+  $items['admin/config/services/socialpagefeed'] = array(
+    'title' => 'Social Feed Settings',
+    'description' => 'Configure to fit clients needs',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('socialpagefeed_facebook_settings'),
+    'access arguments' => array('administer modules'),
+    'file' => 'socialpagefeed.admin.inc',
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  $items['admin/config/services/socialpagefeed/facebook'] = array(
+    'title' => 'Facebook',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('socialpagefeed_facebook_settings'),
+    'access arguments' => array('administer modules'),
+    'file' => 'socialpagefeed.admin.inc',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => 0,
+    'expanded' => TRUE,
+  );
+
+  $items['admin/config/services/socialpagefeed/facebook/settings'] = array(
+    'title' => 'Settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('socialpagefeed_facebook_settings'),
+    'access arguments' => array('administer modules'),
+    'file' => 'socialpagefeed.admin.inc',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => 0,
+  );
+
+  $items['admin/config/services/socialpagefeed/facebook/page/add'] = array(
+    'title' => 'Add Page',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('socialpagefeed_add_facebook_page'),
+    'access arguments' => array('administer modules'),
+    'file' => 'socialpagefeed.inc',
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 1,
+  );
+
+  $items['admin/config/services/socialpagefeed/facebook/page/edit'] = array(
+    'title' => 'Edit Page',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('socialpagefeed_add_facebook_page'),
+    'access arguments' => array('administer modules'),
+    'file' => 'socialpagefeed.inc',
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  $items['admin/config/services/socialpagefeed/facebook/page/delete'] = array(
+    'title' => 'Delete Page',
+    'page callback' => 'socialpagefeed_delete_facebook_page',
+    'access arguments' => array('administer modules'),
+    'file' => 'socialpagefeed.inc',
+    'access callback' => TRUE,
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  $items['admin/config/services/socialpagefeed/facebook/pagelist'] = array(
+    'title' => 'Lists',
+    'description' => 'Facebook Pages Listing',
+    'page callback' => 'socialpagefeed_facebook_pagelist',
+    'access arguments' => array('administer modules'),
+    'file' => 'socialpagefeed.inc',
+    'access callback' => TRUE,
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 2,
+  );
+
+  $items['admin/config/services/socialpagefeed/twitter'] = array(
+    'title' => 'Twitter',
+    'description' => 'Configure to fit clients needs',
+    'page arguments' => array('socialpagefeed_twitter_settings'),
+    'access arguments' => array('administer modules'),
+    'file' => 'socialpagefeed.admin.inc',
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 1,
+  );
+  $items['admin/config/services/socialpagefeed/instagram'] = array(
+    'title' => 'Instagram',
+    'description' => 'Configure to fit clients needs',
+    'page arguments' => array('socialpagefeed_instagram_settings'),
+    'access arguments' => array('administer modules'),
+    'file' => 'socialpagefeed.admin.inc',
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 2,
+  );
+
+  $items['facebook/webhook'] = array(
+    'title' => 'Facebook Webhook Callback URL',
+    'page callback' => 'facebook_webhook_url_callback',
+    'access callback' => TRUE,
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  return $items;
+}
+
+function facebook_webhook_url_callback() {
+   watchdog('_REQUEST', '<pre>' . print_r($_REQUEST, TRUE) . '</pre>');
+   $str = rand(); 
+   $result = md5($str); 
+   return $result; 
+}
+
+/**
+ * Implements hook_cron().
+ */
+function socialpagefeed_cron() {
+  create_advertiser_ads();
+}
+
+/**
+ * Create and publish new ad nodes if they haven't been created already.
+ */
+function create_advertiser_ads() {
+  $config = array();
+  $config['app_id'] = variable_get('socialpagefeed_facebook_app_id');
+  $config['secret'] = variable_get('socialpagefeed_facebook_secret_key');
+
+  if (isset($config['app_id']) && !empty($config['app_id']) && isset($config['secret']) && !empty($config['secret'])) {
+    $access_token = $config['app_id'] . "|" . $config['secret'];
+
+    $advertisers = db_query("SELECT DISTINCT n.nid, n.title, n.uid, n.status, u.status AS publisher_status, apu.field_advertiser_page_url_value as page_url, abp.field_big_picture_value
+      FROM {node} n
+      LEFT JOIN {field_data_field_ad_groups} aag ON aag.entity_id = n.nid
+      INNER JOIN {field_data_field_advertiser_page_url} apu ON apu.entity_id = n.nid
+      INNER JOIN {users} u ON u.uid = n.uid
+      LEFT JOIN {field_data_field_big_picture} abp ON abp.entity_id = n.nid
+      WHERE n.type = :type AND nid=:nid",
+      array(':type' => 'advertiser', ':nid' => 28))->fetchAll();
+    // Print "<pre>"; print_r($advertisers); print "</pre>"; die;.
+    foreach ($advertisers as $advertiser) {
+      try {
+        if (!empty($advertiser->page_url) && $advertiser->status === '1' && $advertiser->publisher_status === '1') {
+          $regex_fb = '#^\s*https://www\.facebook\.com/.+$#i';
+          $regex_tw = '#^\s*https://twitter\.com/.+$#i';
+          // Check to see if the page_url is a facebook url.
+          if (preg_match($regex_fb, $advertiser->page_url)) {
+            // $fb_token = next($fb_tokens) ? current($fb_tokens) : reset($fb_tokens);
+            $fb_token = $access_token;
+            create_ad_from_facebook_post_if_new($advertiser, $fb_token);
+            // If preg_match for facebook didn't work, check preg for twitter and make twitter embed node.
+          }
+          elseif (preg_match($regex_tw, $advertiser->page_url)) {
+            create_ad_from_twitter_post_if_new($advertiser);
+          }
+        }
+      }
+      catch (Exception $e) {
+        continue;
+      }
+    }
+
+  }
+}
+
+/**
+ * Create and publish new ad nodes if they haven't been created already.
+ */
+function create_ad_from_facebook_post_if_new($advertiser, $access_token) {
+  $num_posts = 5;
+  $advertiser_name_array = explode('/', $advertiser->page_url);
+  if ($advertiser_name_array[3] == 'pages') {
+    $pageName = $advertiser_name_array[5];
+  }
+  else {
+    $pageName = $advertiser_name_array[3];
+  }
+  watchdog('pageName', '<pre>' . $pageName . '. Token ID:');
+
+  $fb_url = "https://graph.facebook.com/$pageName/posts?access_token=$access_token&limit=$num_posts&fields=id,message,picture,full_picture,link,name,caption,description,object_id";
+  watchdog('fb_url', $fb_url . '. Token ID:');
+  $facebook_response = drupal_http_request($fb_url);
+  $facebook_array = json_decode($facebook_response->data, TRUE);
+  if (!empty($facebook_array['error']['message'])) {
+    watchdog('socialpagefeed', $facebook_array['error']['message'] . '. Token ID:' . $access_token);
+  }
+  watchdog('facebook_array', '<pre>' . print_r($facebook_array, TRUE) . '</pre>');
+
+  // Now loop through a given number of facebook posts from this advertiser to find one with the required fields (neglecting likes etc. that are also returned with /posts)
+  for ($i = 0; $i < $num_posts; $i++) {
+
+    // Make sure post has an id and either a message, picture, or link (with either name, caption, or description)
+    if (!empty($facebook_array['data'][$i]['id']) &&
+    (!empty($facebook_array['data'][$i]['message']) ||
+    !empty($facebook_array['data'][$i]['picture']) ||
+    (!empty($facebook_array['data'][$i]['link'])
+    &&
+    (!empty($facebook_array['data'][$i]['name']) ||
+    !empty($facebook_array['data'][$i]['caption']) ||
+    !empty($facebook_array['data'][$i]['description'])))
+    ) &&
+    // Make sure message doesn't end in  ##, which is the code for excluding the post from inclusion in nowads.
+    !(!empty($facebook_array['data'][$i]['message']) && preg_match('/##$/', $facebook_array['data'][$i]['message']) == 1)) {
+      $facebook_id = $facebook_array['data'][$i]['id'];
+
+      watchdog('facebook_id', $facebook_id . '. Token ID:');
+      // Make sure we haven't already made a node with the same facebook id. If the same advertiser goes through multiple publishers, thus having multiple advertiser nodes, we need to make sure that their post is pulled from facebook for each publisher, so either we should filter by publisher here using n.uid equal to $advertiser->uid, or filter by advertiser by joining with the node reference field and making the reference nid equal to $advertiser->nid.
+      $id_match = db_query("SELECT nid
+                            FROM {node} n
+                            INNER JOIN {field_data_field_fb_id} fb
+                            ON fb.entity_id = n.nid
+			    WHERE fb.field_fb_id_value = :fb_id
+                            LIMIT 1",
+          array(':fb_id' => $facebook_id))->fetchField();
+      watchdog('id_match', '<pre>' . print_r($id_match, TRUE) . '</pre>');
+      if (empty($id_match)) {
+
+        watchdog('createnewadvertiser', $id_match . '. Token ID:');
+        // Make the new node and publish it.
+        $node = new stdClass();
+        $node->title = @$advertiser->title . time();
+        $node->type = "facebook_feed";
+        // Sets some defaults. Invokes hook_prepare() and hook_node_prepare().
+        node_object_prepare($node);
+        // Or e.g. 'en' if locale is enabled.
+        $node->language = LANGUAGE_NONE;
+        $node->uid = 1;
+        $node->status = 1;
+        $node->promote = 0;
+        $node->field_fb_id[$node->language][0]['value'] = substr($facebook_id, 0, 255);
+        $node->field_fb_profile[$node->language][0]['value'] = utf8_encode(substr('<img src="https://graph.facebook.com/' . $pageName . '/picture?type=large">', 0, 255));
+        $node->field_fb_profile[$node->language][0]['format'] = 'full_html';
+
+        if (!empty($facebook_array['data'][$i]['message'])) {
+          $node->body[$node->language][0]['value'] = utf8_encode(preg_replace('/[^(\x20-\x7F)]*/', '', $facebook_array['data'][$i]['message']));
+        }
+
+        if (!empty($facebook_array['data'][$i]['picture'])) {
+          if (!empty($facebook_array['data'][$i]['link']) && (!empty($facebook_array['data'][$i]['caption']) || !empty($facebook_array['data'][$i]['description']))) {
+            $node->field_fb_lnkd_piclong[$node->language][0]['value'] = utf8_encode('<img src="' . $facebook_array['data'][$i]['picture'] . '">');
+            $node->field_fb_lnkd_piclong[$node->language][0]['format'] = 'full_html';
+          }
+          else {
+            // Check if this advertiser has the big picture option selected, and, if so, fill the big picture field.
+            if (!empty($advertiser->field_big_picture_value) && $advertiser->field_big_picture_value == '1' && !empty($facebook_array['data'][$i]['object_id'])) {
+              // $facebook_photo = drupal_http_request("https://graph.facebook.com/{$facebook_array['data'][$i]['object_id']}?access_token=$access_token&fields=source");
+              // $facebook_photo_array = json_decode($facebook_photo->data, TRUE);.
+              if (!empty($facebook_array['data'][$i]['full_picture'])) {
+                $node->field_fb_image_big[$node->language][0]['value'] = utf8_encode('<img src="' . $facebook_array['data'][$i]['full_picture'] . '">');
+                $node->field_fb_image_big[$node->language][0]['format'] = 'full_html';
+              }
+            }
+            else {
+              $node->field_fb_image[$node->language][0]['value'] = utf8_encode(substr('<img src="' . $facebook_array['data'][$i]['picture'] . '">', 0, 255));
+              $node->field_fb_image[$node->language][0]['format'] = 'full_html';
+            }
+          }
+        }
+
+        if (!empty($facebook_array['data'][$i]['link']) && (!empty($facebook_array['data'][$i]['caption']) || !empty($facebook_array['data'][$i]['description']))) {
+          $node->field_fb_lnkd_link[$node->language][0]['value'] = utf8_encode(substr($facebook_array['data'][$i]['link'], 0, 255));
+          $node->field_fb_lnkd_link[$node->language][0]['format'] = 'full_html';
+
+          if (!empty($facebook_array['data'][$i]['name'])) {
+            $node->field_fb_lnkd_headline[$node->language][0]['value'] = utf8_encode(substr($facebook_array['data'][$i]['name'], 0, 100));
+            $node->field_fb_lnkd_headline[$node->language][0]['format'] = 'full_html';
+          }
+
+          if (!empty($facebook_array['data'][$i]['caption'])) {
+            $node->field_fb_lnkd_site[$node->language][0]['value'] = utf8_encode(substr($facebook_array['data'][$i]['caption'], 0, 100));
+            // $node->field_fb_lnkd_site[$node->language][0]['format'] = 'full_html';.
+          }
+
+          if (!empty($facebook_array['data'][$i]['description'])) {
+            $node->field_fb_lnkd_content[$node->language][0]['value'] = utf8_encode($facebook_array['data'][$i]['description']);
+            $node->field_fb_lnkd_content[$node->language][0]['format'] = 'full_html';
+          }
+        }
+        // Print "<pre>"; print_r($node); print "</pre>"; die;
+        // Prepare node for saving.
+        $node = node_submit($node);
+        node_save($node);
+      }
+      // After finding the most recent facebook post from that advertiser with the required fields, we stop checking more posts. Note that we may have already saved this post and so skip creating a node in the previous if statement, but we still want to break.
+      break 1;
+    }
+  }
+  die;
+}
+
+/**
+ * Create and publish new twitter embed ad nodes if they haven't been created already.
+ */
+function create_ad_from_twitter_post_if_new($advertiser) {
+
+  // Using twitter api directly with curl. based on
+  // http://stackoverflow.com/questions/12916539/simplest-php-example-for-retrieving-user-timeline-with-twitter-api-version-1-1
+  // @Rivers and @lackovic10 responses
+  $curl_base_time = microtime(TRUE);
+  $url = "https://api.twitter.com/1.1/statuses/user_timeline.json";
+
+  $oauth_access_token = "1091335758-JSxIbvVjBsyA7D89v4VXoQrpYgs1hvtajIf2chO";
+  $oauth_access_token_secret = "LJh7mplOk51xCpzNcooPjMD5dmbp0enyIvDZ9psLGW7OA";
+  $consumer_key = "m4nlh46jrKDODTI5Vjealw";
+  $consumer_secret = "4rSo7fxpaMgbSUnnE7cftTlX0PyvBpFl0AJ3iYwY";
+
+  $url_array = explode('/', $advertiser->field_fb_page_value);
+  $screen_name = $url_array[3];
+
+  $oauth = array(
+    'screen_name' => $screen_name,
+    'count' => 1,
+    'exclude_replies' => 'true',
+    'include_rts' => 'false',
+    'oauth_consumer_key' => $consumer_key,
+    'oauth_nonce' => time(),
+    'oauth_signature_method' => 'HMAC-SHA1',
+    'oauth_token' => $oauth_access_token,
+    'oauth_timestamp' => time(),
+    'oauth_version' => '1.0',
+  );
+
+  $base_info = buildBaseString($url, 'GET', $oauth);
+  $composite_key = rawurlencode($consumer_secret) . '&' . rawurlencode($oauth_access_token_secret);
+  $oauth_signature = base64_encode(hash_hmac('sha1', $base_info, $composite_key, TRUE));
+  $oauth['oauth_signature'] = $oauth_signature;
+
+  // Make Requests.
+  $header = array(buildAuthorizationHeader($oauth), 'Expect:');
+  $options = array(
+    CURLOPT_HTTPHEADER => $header,
+    // CURLOPT_POSTFIELDS => $postfields,.
+    CURLOPT_HEADER => FALSE,
+    // CURLOPT_URL => $url . "?screen_name=$screen_name&count=1",.
+    CURLOPT_URL => $url . "?screen_name=$screen_name&count=1&exclude_replies=true&include_rts=false",
+    CURLOPT_RETURNTRANSFER => TRUE,
+    CURLOPT_SSL_VERIFYPEER => FALSE,
+  );
+
+  $feed = curl_init();
+  curl_setopt_array($feed, $options);
+  $json = curl_exec($feed);
+  curl_close($feed);
+
+  $twitter_data = json_decode($json);
+  if (is_array($twitter_data) && !empty($twitter_data[0]->id_str)) {
+    // if(!empty($twitter_data[0]->id_str)){.
+    $tweet_id = $twitter_data[0]->id_str;
+    $curl_time = microtime(TRUE) - $curl_base_time;
+
+    /*make sure we haven't already made a node with the same twitter id. If the same advertiser goes through multiple publishers, thus having multiple advertiser nodes, we need to make sure that their post is pulled from twitter for each publisher, so either we should filter by publisher here using n.uid equal to $advertiser->uid, or filter by advertiser by joining with the node reference field and making the reference nid equal to $advertiser->nid.*/
+    $id_match = db_query("SELECT 1
+                          FROM {node} n
+                          INNER JOIN {field_data_field_twitter_id} tw
+                          ON tw.entity_id = n.nid
+                          INNER JOIN {field_data_field_local_biz} flb
+                          ON flb.entity_id = n.nid
+                          WHERE tw.field_twitter_id_value = :tw_id
+                          AND flb.field_local_biz_target_id = :loc_biz_nid
+                          LIMIT 1",
+                array(
+                  ':tw_id' => $tweet_id,
+                  ':loc_biz_nid' => $advertiser->nid,
+                ))->fetchAssoc();
+    if (empty($id_match)) {
+      // Make the new node and publish it.
+      $node = new stdClass();
+      $node->title = $advertiser->title . time();
+      $node->type = "twitter_embed";
+      // Sets some defaults. Invokes hook_prepare() and hook_node_prepare().
+      node_object_prepare($node);
+      // Or e.g. 'en' if locale is enabled.
+      $node->language = LANGUAGE_NONE;
+      $node->uid = $advertiser->uid;
+      $node->field_local_biz[$node->language][] = array(
+        'target_id' => $advertiser->nid,
+        'target_type' => 'node',
+      );
+      // (1 or 0): published or not.
+      $node->status = 1;
+      // (1 or 0): promoted to front page.
+      $node->promote = 0;
+      $node->field_twitter_id[$node->language][0]['value'] = substr($tweet_id, 0, 255);
+      $node->field_twitter_embed[$node->language][0]['value'] = substr("<div class='twitter-embed-container'><blockquote class='twitter-tweet'><a href='$advertiser->field_fb_page_value/statuses/$tweet_id'></a></blockquote></div>", 0, 255);
+      $node->field_twitter_embed[$node->language][0]['format'] = 'full_html';
+      // Prepare node for saving.
+      $node = node_submit($node);
+      node_save($node);
+
+      // Add entry to nowads_map table.
+      db_insert('nowads_map')
+        ->fields(array(
+          'nid' => $node->nid,
+          'advid' => $advertiser->nid,
+          'src'  => 'twitter',
+          'srcid'  => $tweet_id,
+          'uid' => $advertiser->uid,
+        ))
+        ->execute();
+
+      // Now delete previous node. Doing this after saving new node (even though it's more complicated) because
+      // any error in saving the new node will prevent the deleting of the old node.
+      delete_previous_ad_node($advertiser->nid);
+    }
+  }
+}
+
+/**
+ * Implements hook_theme().
+ */
+function socialpagefeed_theme($existing, $type, $theme, $path) {
+  return array(
+    'socialpagefeed_facebook' => array(
+      'variables' => array('facebook' => NULL),
+      'template' => 'facebook',
+      'path' => drupal_get_path('module', 'socialpagefeed') . '/templates',
+    ),
+    'socialpagefeed_twitter' => array(
+      'variables' => array('twitter' => NULL),
+      'template' => 'twitter',
+      'path' => drupal_get_path('module', 'socialpagefeed') . '/templates',
+    ),
+    'socialpagefeed_instagram' => array(
+      'variables' => array('instagram' => NULL),
+      'template' => 'instagram',
+      'path' => drupal_get_path('module', 'socialpagefeed') . '/templates',
+    ),
+  );
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function socialpagefeed_block_info() {
+  $blocks = array();
+  $blocks['facebook_latest_feed'] = array(
+    'info' => t('Social Page Feed Facebook'),
+    'cache' => DRUPAL_CACHE_CUSTOM,
+  );
+  $blocks['twitter_latest_feed'] = array(
+    'info' => t('Social Page Feed Twitter'),
+    'cache' => DRUPAL_CACHE_CUSTOM,
+  );
+  $blocks['instagram_latest_feed'] = array(
+    'info' => t('Social Page Feed Instagram'),
+    'cache' => DRUPAL_CACHE_CUSTOM,
+  );
+
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function socialpagefeed_block_view($delta = '') {
+  $block = array();
+  switch ($delta) {
+    case 'facebook_latest_feed':
+      module_load_include('inc', 'socialpagefeed', 'socialpagefeed.block');
+      $block['subject'] = '';
+      $block['content'] = socialpagefeed_posts_render('facebook');
+      break;
+
+    case 'twitter_latest_feed':
+      module_load_include('inc', 'socialpagefeed', 'socialpagefeed.block');
+      $block['subject'] = '';
+      $block['content'] = socialpagefeed_posts_render('twitter');
+      break;
+
+    case 'instagram_latest_feed':
+      module_load_include('inc', 'socialpagefeed', 'socialpagefeed.block');
+      $block['subject'] = '';
+      $block['content'] = socialpagefeed_posts_render('instagram');
+      break;
+  }
+
+  return $block;
+}
