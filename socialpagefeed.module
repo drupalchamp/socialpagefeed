@@ -118,6 +118,13 @@ function socialpagefeed_menu() {
     'weight' => 2,
   );
 
+  $items['fb-auth-redirect'] = array(
+    'title' => 'Facebook Authentication Redirect URL Callback',
+    'page callback' => 'facebook_authentication_redirect_callback',
+    'access callback' => TRUE,
+    'type' => MENU_NORMAL_ITEM,
+  );
+
   $items['facebook/webhook'] = array(
     'title' => 'Facebook Webhook Callback URL',
     'page callback' => 'facebook_webhook_url_callback',
@@ -128,18 +135,190 @@ function socialpagefeed_menu() {
   return $items;
 }
 
+/**
+ *
+ */
+function socialpagefeed_form_alter(&$form, &$form_state, $form_id) {
+  if ($form_id == 'advertiser_node_form') {
+    $form['field_verified']['#disabled'] = TRUE;
+    if (isset($_SESSION['advertiser_data']) && isset($_SESSION['advertiser_data']['fb_auth_redirect'])) {
+
+      $advertiser_data = $_SESSION['advertiser_data'];
+      if (isset($advertiser_data['advertiser_name']) && !empty($advertiser_data['advertiser_name'])) {
+        $form['title']['#default_value'] = $advertiser_data['advertiser_name'];
+      }
+      if (isset($advertiser_data['page_type']) && !empty($advertiser_data['page_type'])) {
+        $form['field_page_type']['und']['#default_value'] = $advertiser_data['page_type'];
+      }
+      if (isset($advertiser_data['page_id']) && !empty($advertiser_data['page_id'])) {
+        $form['field_advertiser_page_id']['und'][0]['value']['#default_value'] = $advertiser_data['page_id'];
+      }
+      if (isset($advertiser_data['email']) && !empty($advertiser_data['email'])) {
+        $form['field_advertiser_email']['und'][0]['value']['#default_value'] = $advertiser_data['email'];
+      }
+      if (isset($advertiser_data['banner']) && !empty($advertiser_data['banner'])) {
+        $form['field_advertiser_banner']['und'][0]['#default_value'] = ['fid' => $advertiser_data['banner'], 'display' => 1];
+      }
+      if (isset($advertiser_data['ad_groups']) && !empty($advertiser_data['ad_groups'])) {
+        $form['field_ad_groups']['und']['#default_value'] = $advertiser_data['ad_groups'];
+      }
+      if (isset($advertiser_data['big_picture']) && !empty($advertiser_data['big_picture'])) {
+        $form['field_big_picture']['und']['#default_value'] = $advertiser_data['big_picture'];
+      }
+      if (isset($advertiser_data['verified'])) {
+        $form['field_verified']['und']['#default_value'] = 1;
+        unset($_SESSION['advertiser_data']);
+      }
+    }
+
+    $form['authorize'] = array(
+      '#type' => 'button',
+      '#value' => t('Allow Permission to Access Page'),
+      '#validate' => array('social_page_authentication_validate'),
+      '#weight' => 2,
+    );
+  }
+}
+
+/**
+ *
+ */
+function social_page_authentication_validate($form, &$form_state) {
+  $advertiser_name = @$form_state['values']['title'];
+  $page_type = @$form_state['values']['field_page_type']['und'][0]['value'];
+  $page_id = @$form_state['values']['field_advertiser_page_id']['und'][0]['value'];
+
+  if ($page_type == 'Facebook') {
+    $_SESSION['advertiser_data'] = [];
+    $_SESSION['advertiser_data']['advertiser_name'] = $advertiser_name;
+    $_SESSION['advertiser_data']['page_type'] = $page_type;
+    $_SESSION['advertiser_data']['page_id'] = $page_id;
+
+    $email = @$form_state['values']['field_advertiser_email']['und'][0]['value'];
+    if (!empty($email)) {
+      $_SESSION['advertiser_data']['email'] = $email;
+    }
+
+    $banner = @$form_state['values']['field_advertiser_banner']['und'][0]['fid'];
+    if (!empty($banner)) {
+      $_SESSION['advertiser_data']['banner'] = $banner;
+    }
+
+    $ad_groups = @$form_state['values']['field_ad_groups']['und'];
+    if (!empty($ad_groups)) {
+      foreach ($ad_groups as $group) {
+        $_SESSION['advertiser_data']['ad_groups'][] = $group['tid'];
+      }
+    }
+
+    $big_picture = @$form_state['values']['field_big_picture']['und'][0]['value'];
+    if (!empty($big_picture)) {
+      $_SESSION['advertiser_data']['big_picture'] = $big_picture;
+    }
+
+    $nid = @$form_state['values']['nid'];
+    if (!empty($nid)) {
+      $_SESSION['advertiser_data']['nid'] = $nid;
+    }
+
+    $query = [
+      "client_id" => variable_get('socialpagefeed_facebook_app_id'),
+      "redirect_uri" => "https://fbtest.drupalchamp.org/fb-auth-redirect/",
+      "scope" => "public_profile,email,manage_pages",
+    ];
+
+    drupal_goto('https://www.facebook.com/v3.2/dialog/oauth', ['query' => $query]);
+  }
+}
+
+/**
+ *
+ */
+function facebook_authentication_redirect_callback() {
+  global $base_url;
+  $app_id = variable_get('socialpagefeed_facebook_app_id');
+  $secret = variable_get('socialpagefeed_facebook_secret_key');
+  $redirect_uri = 'https://fbtest.drupalchamp.org/fb-auth-redirect/';
+  $code = @$_REQUEST['code'];
+  $page_id = @$_SESSION['advertiser_data']['page_id'];
+
+  $_SESSION['advertiser_data']['fb_auth_redirect'] = 1;
+  if (isset($_SESSION['advertiser_data']['nid'])) {
+    $nid = $_SESSION['advertiser_data']['nid'];
+    $destination = $base_url . "/node/$nid/edit";
+  }
+  else {
+    $destination = $base_url . "/node/add/advertiser";
+  }
+
+  // Fetch User Access Token.
+  if (!empty($app_id) && !empty($secret) && !empty($redirect_uri) &&!empty($code)) {
+
+    $query = ["client_id" => $app_id, "redirect_uri" => $redirect_uri, "client_secret" => $secret, "code" => $code];
+    $user_access_token_url = url("https://graph.facebook.com/oauth/access_token", ['query' => $query]);
+    $user_access_token_response = drupal_http_request($user_access_token_url);
+    $user_access_token_data = json_decode($user_access_token_response->data, TRUE);
+
+    if (!empty($user_access_token_data['error']['message'])) {
+      drupal_set_message(t($user_access_token_data['error']['message']), 'error');
+      drupal_goto($destination, ['absolute' => TRUE]);
+    }
+    elseif (isset($user_access_token_data['access_token']) && !empty($user_access_token_data['access_token']) && !empty($page_id)) {
+
+      // Get Page Access Token.
+      $user_access_token = $user_access_token_data['access_token'];
+      $query = ["access_token" => $user_access_token, "fields" => "access_token"];
+      $page_access_token_url = url("https://graph.facebook.com/v3.2/$page_id/", ['query' => $query]);
+      $page_access_token_response = drupal_http_request($page_access_token_url);
+      $page_access_token_data = json_decode($page_access_token_response->data, TRUE);
+
+      if (!empty($page_access_token_data['error']['message'])) {
+        drupal_set_message(t($page_access_token_data['error']['message']), 'error');
+        drupal_goto($destination, ['absolute' => TRUE]);
+      }
+      elseif (isset($page_access_token_data['access_token']) && !empty($page_access_token_data['access_token'])) {
+        // Now subscribe the facebook page.
+        $page_access_token = $page_access_token_data['access_token'];
+        $fields = ['feed', 'name', 'picture', 'category', 'description'];
+        $query = ["access_token" => $page_access_token, "subscribed_fields" => implode(',', $fields)];
+        $page_subscribe_app_url = url("https://graph.facebook.com/v3.2/$page_id/subscribed_apps", ['query' => $query]);
+        $page_subscribe_app_response = drupal_http_request($page_subscribe_app_url, ['method' => 'POST']);
+        $page_subscribe_app_data = json_decode($page_subscribe_app_response->data, TRUE);
+
+        if (!empty($page_subscribe_app_data['error']['message'])) {
+          drupal_set_message(t($page_subscribe_app_data['error']['message']), 'error');
+          drupal_goto($destination, ['absolute' => TRUE]);
+        }
+        elseif (isset($page_subscribe_app_data['success'])) {
+          $_SESSION['advertiser_data']['verified'] = TRUE;
+          drupal_set_message('Page Permission Granted Successfully');
+          drupal_goto($destination, ['absolute' => TRUE]);
+        }
+      }
+    }
+  }
+  return 'yyy';
+}
+
+/**
+ *
+ */
 function facebook_webhook_url_callback() {
-   watchdog('_REQUEST', '<pre>' . print_r($_REQUEST, TRUE) . '</pre>');
-   $str = rand(); 
-   $result = md5($str); 
-   return $result; 
+  watchdog('_REQUEST', '<pre>' . print_r($_REQUEST, TRUE) . '</pre>');
+  if ($_REQUEST['hub_verify_token'] == 'demo12345') {
+    $input = json_decode(file_get_contents('php://input'), TRUE);
+    watchdog('_INPUT', '<pre>' . print_r($input, TRUE) . '</pre>');
+  }
+
+  header('Content-Type: application/json');
+  echo json_encode($_REQUEST['hub_challenge'], JSON_NUMERIC_CHECK);
 }
 
 /**
  * Implements hook_cron().
  */
 function socialpagefeed_cron() {
-  create_advertiser_ads();
+  // create_advertiser_ads();
 }
 
 /**
@@ -152,19 +331,21 @@ function create_advertiser_ads() {
 
   if (isset($config['app_id']) && !empty($config['app_id']) && isset($config['secret']) && !empty($config['secret'])) {
     $access_token = $config['app_id'] . "|" . $config['secret'];
-
     $advertisers = db_query("SELECT DISTINCT n.nid, n.title, n.uid, n.status, u.status AS publisher_status, apu.field_advertiser_page_url_value as page_url, abp.field_big_picture_value
       FROM {node} n
       LEFT JOIN {field_data_field_ad_groups} aag ON aag.entity_id = n.nid
       INNER JOIN {field_data_field_advertiser_page_url} apu ON apu.entity_id = n.nid
       INNER JOIN {users} u ON u.uid = n.uid
       LEFT JOIN {field_data_field_big_picture} abp ON abp.entity_id = n.nid
-      WHERE n.type = :type AND nid=:nid",
-      array(':type' => 'advertiser', ':nid' => 28))->fetchAll();
+      WHERE n.type = :type",
+      array(':type' => 'advertiser'))->fetchAll();
+    // array(':type' => 'advertiser', ':nid' => 28))->fetchAll();
     // Print "<pre>"; print_r($advertisers); print "</pre>"; die;.
+    watchdog('advertisers', '<pre>' . print_r($advertisers, TRUE) . '</pre>');
     foreach ($advertisers as $advertiser) {
       try {
-        if (!empty($advertiser->page_url) && $advertiser->status === '1' && $advertiser->publisher_status === '1') {
+        // If (!empty($advertiser->page_url) && $advertiser->status === '1' && $advertiser->publisher_status === '1') {.
+        if (!empty($advertiser->page_url) && $advertiser->status == 1) {
           $regex_fb = '#^\s*https://www\.facebook\.com/.+$#i';
           $regex_tw = '#^\s*https://twitter\.com/.+$#i';
           // Check to see if the page_url is a facebook url.
@@ -180,6 +361,7 @@ function create_advertiser_ads() {
         }
       }
       catch (Exception $e) {
+        watchdog('Exception', '<pre>' . print_r($e, TRUE) . '</pre>');
         continue;
       }
     }
@@ -309,7 +491,6 @@ function create_ad_from_facebook_post_if_new($advertiser, $access_token) {
       break 1;
     }
   }
-  die;
 }
 
 /**
